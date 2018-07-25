@@ -1,0 +1,51 @@
+@startuml
+NonExistentReplica --> NewReplica
+NewReplica -left-> OnlineReplica
+NewReplica -right-> OfflineReplica
+OnlineReplica -right-> OnlineReplica
+OnlineReplica --> OfflineReplica
+OfflineReplica -right-> OfflineReplica
+OfflineReplica -> OnlineReplica
+OfflineReplica --> ReplicaDeletionStarted
+ReplicaDeletionStarted -left-> ReplicaDeletionSuccessful
+ReplicaDeletionStarted -right-> ReplicaDeletionIneligible
+ReplicaDeletionSuccessful -up-> NonExistentReplica
+ReplicaDeletionIneligible -left-> OnlineReplica
+ReplicaDeletionIneligible -right-> OfflineReplica
+
+
+NonExistentReplica: 1. filter out replica from replicaAssignment of context
+NonExistentReplica: 2. remove replica state 
+
+NewReplica: 1. get leaderIsrAndEpoch from zk
+NewReplica: 2. if leaderIsrAndEpoch exists and valid
+NewReplica: .	-> add leaderAndIsrRequest
+
+ReplicaDeletionStarted: 1. add stopReplicaRequest (deletePartition = true)
+
+state OnlineReplica {
+	[*] -> NewReplica_1
+	NewReplica_1 --> OnlineReplica_1
+	OnlineReplica_1: 1. add replica to replicaAssignment of context if needed
+	--
+	state "Other States" as OtherStates
+	[*] -> OtherStates
+	OtherStates --> OnlineReplica_2
+	OtherStates: OnlineReplica, OfflineReplica, ReplicaDeletionIneligible
+	OnlineReplica_2: 1. get leaderIsrAndControllerEpoch from context
+	OnlineReplica_2: 2. if leaderIsrAndControllerEpoch exists
+	OnlineReplica_2: .	->add leaderAndIsrRequest
+}
+
+OfflineReplica: 1. add stopReplicaRequest (deletePartition = false)
+OfflineReplica: 2. get leaderIsrAndControllerEpoch from context
+OfflineReplica: 3. if leaderIsrAndControllerEpoch exists
+OfflineReplica:	.	->try to remove replica from Isr on zk
+OfflineReplica:	.	->if successful
+OfflineReplica:	.		->get new leaderIsrAndControllerEpoch which sync with zk
+OfflineReplica: .		->get current replicaAssignment from context
+OfflineReplica: .		->if this partition is not to be deleted
+OfflineReplica: .			->get brokers from current replicaAssignment excludes replica 
+OfflineReplica: .			->add leaderAndIsrRequest with new leaderIsrAndControllerEpoch
+
+@enduml

@@ -1,0 +1,11 @@
+@startuml
+group updateSessionAndGetNewSessionId
+	note over UpdateSessionAndGetNewSessionIdDefaultTask: update sessioin with acr
+	UpdateSessionAndGetNewSessionIdDefaultTask -> SessionManagementHandler: update session
+	alt if session id is not blank
+		UpdateSessionAndGetNewSessionIdDefaultTask -> IAMSessionIDParser: build new iam session id
+		IAMSessionIDParser --> UpdateSessionAndGetNewSessionIdDefaultTask: new iam session id
+	end
+	note over UpdateSessionAndGetNewSessionIdDefaultTask: set new iam session id to request
+end
+@enduml

@@ -1,0 +1,54 @@
+@startuml
+Client -> AuthorizeService: ("/p/v1/portal/authorize") authorize request
+AuthorizeService -> ECEAuthorizationManager: processAuthorizeRequest
+ECEAuthorizationManager -> AuthorizationManager: getClientById
+AuthorizationManager --> ECEAuthorizationManager: Client
+
+group validate parameters
+	note over ECEAuthorizationManager
+		validate header: Sec-Token-Binding (optional)
+		validate redirect uri
+		validate response type (only "code" support)
+	end note
+	ECEAuthorizationManager -> AuthorizationManager: getValidScopes(requestScopes)
+	AuthorizationManager --> ECEAuthorizationManager: scopeListFromDB
+	note over ECEAuthorizationManager
+		validate scopes with client
+		validate scopes with requestScopes
+		validate access type
+		validate grant type
+		validate subscopes
+		validate prompt
+		validate max age
+		validate claims
+	end note
+end
+
+ECEAuthorizationManager -> SessionHelper: getValidSessionFromHeader(headerParams)
+	note over SessionHelper: decode session from cookie
+	alt decoded session != null
+		SessionHelper -> AAAdaptationServiceHelper: postDecodeIAMSessionId(decodedSession)
+		SessionHelper -> SessionManagementHandler: validate session
+		SessionManagementHandler -> SessionInternalServiceImpl: validate session
+		SessionInternalServiceImpl -> AuthenticationSessionManager: get session  
+		AuthenticationSessionManager --> SessionInternalServiceImpl: session
+		SessionInternalServiceImpl -> AuthenticationSessionManager: validate session
+		note left AuthenticationSessionManager
+			session status:
+			NOTEXIST (no session)
+			INAVLID (remove session)
+			EXPIRED (remove session)
+			VALID (session exists)
+		end note
+		AuthenticationSessionManager --> SessionInternalServiceImpl: session status
+		SessionInternalServiceImpl --> SessionManagementHandler: validate session response
+		SessionManagementHandler -> SessionHelper: validate session response
+	end
+SessionHelper --> ECEAuthorizationManager: session
+ECEAuthorizationManager -> TaskManager: do task
+group tasks
+	TaskManager -> CheckAuthenticationRequiredDefaultTask: process
+end
+TaskManager --> ECEAuthorizationManager: task response
+ECEAuthorizationManager --> AuthorizeService: ECEAuthorizationResponse
+@enduml

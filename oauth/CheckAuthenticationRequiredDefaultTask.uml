@@ -1,0 +1,159 @@
+@startuml
+note over CheckAuthenticationRequiredDefaultTask: get valid ACRs with request
+group determine is authentication required
+	note over CheckAuthenticationRequiredDefaultTask
+		check if prompt contains login
+		check if session does not exists
+	end note
+	CheckAuthenticationRequiredDefaultTask -> IAMProfileHandler: query user info
+	IAMProfileHandler --> CheckAuthenticationRequiredDefaultTask: user info
+	CheckAuthenticationRequiredDefaultTask -> SecurityCounterHandler: check lock info
+	alt user is not anonymous
+		CheckAuthenticationRequiredDefaultTask -> OAuthIntegrationPointManager: ipAuthorizePostRetrieveUserInfo
+	end
+	note over CheckAuthenticationRequiredDefaultTask
+		check if session exceeds max age (all AMR in session exceed max age)
+		check if exists one system supported AMR doesn't exceed max age
+	end note
+end 
+note over CheckAuthenticationRequiredDefaultTask
+	calculate user available AMRs:
+		1. get all system supported AMRs
+		2. filter out bio AMRs if system or user not enabled
+		3. filter out request unsupported AMRs
+		4. filter out security question AMR:
+			4.1 session not exists
+			4.2 count of questions < min number in config
+end note
+alt user is not anonymous
+	CheckAuthenticationRequiredDefaultTask -> OAuthIntegrationPointManager: ipAuthorizePreDetermineAuthenticationDetails
+	OAuthIntegrationPointManager --> CheckAuthenticationRequiredDefaultTask: responseContext
+	alt responseContext is not empty
+		note over CheckAuthenticationRequiredDefaultTask: clean and update user available AMRs if needed
+	end
+end
+group determine authentication details
+	alt valid ACRs is empty
+		note over CheckAuthenticationRequiredDefaultTask: use system default ACR
+	end
+	loop (for each ACR until find a satisfied one)
+		alt if authentication is required
+			group check ACR required authentication
+				note over CheckAuthenticationRequiredDefaultTask
+					1. get AMRs of ACR with factor=1 (filter out bio AMRs if system or user not support)
+					2. calculate intersection of user available AMRs and the ACR's AMRs
+				end note
+				alt if intersection is not empty
+					note over CheckAuthenticationRequiredDefaultTask
+					1. set authentication is required
+					2. set this ACR as authentication target ACR
+					end note
+				end
+			end
+		else 
+			note over CheckAuthenticationRequiredDefaultTask
+				calculate valid AMRs in session:
+				1. system supported
+				2. not expired
+				3. not exceed max age in request
+			end note
+			group check ACR required 2nd factor validation
+				note over CheckAuthenticationRequiredDefaultTask
+					1. get all AMRs of ACR (filter out bio AMRs if system or user not support)
+					2. calculate intersection of valid AMRs and the ACR's AMRs
+					3. calculate factor set with intersection and system supported AMRs config
+					4. get ACR's factor size in config
+				end note
+				alt if size of factor set < size of ACR's factor in config
+					note over CheckAuthenticationRequiredDefaultTask
+						1. calculate AMRs which factors are all within factor set
+						2. calculate intersection of AMRs(step 1) and user available AMRs
+					end note
+					alt if intersection is not empty
+						note over CheckAuthenticationRequiredDefaultTask: set authentication to 2nd factor validation required
+					end
+				end
+				note over CheckAuthenticationRequiredDefaultTask: set this ACR as authentication target ACR
+			end
+		end
+	end
+	note over CheckAuthenticationRequiredDefaultTask
+		1. Error if no ACR found
+		2. AuthenticationDetails if AMRs are not empty
+		3. AuthenticationDetails (authentication required: false, 2nd factor validation: false) if user login with OTP and system config enables OTP
+	end note
+	group check user info reqired 2nd factor validation
+		note over CheckAuthenticationRequiredDefaultTask: calculate valid factors from valid AMRs and system supported AMR configs
+		alt if admin 2nd factor validation in user info == true
+			note over CheckAuthenticationRequiredDefaultTask
+				1. get admin preferred AMRs from user info
+				2. get admin factors from preferred AMRs and system supported AMR configs
+			end note
+			alt if admin factors is not empty && intersection of admin factors and valid factors is empty
+				note over CheckAuthenticationRequiredDefaultTask
+					calculate AMRs from user avaliable AMRs which factors are interset with admin factors
+					1. Error if AMRs are empty
+					2. AuthenticationDetails (2nd factor validation: true)
+				end note
+			end
+			alt if size of valid factors < 2
+				note over CheckAuthenticationRequiredDefaultTask
+					calculate AMRs from user avaliable AMRs which exists factors are not in valid factors
+					1. Error if AMRs are empty
+					2. AuthenticationDetails (2nd factor validation: true)
+				end note
+			end
+		end
+		alt if one time 2nd factor validation in user info == true && size of valid factors < 2
+			note over CheckAuthenticationRequiredDefaultTask
+				calculate AMRs from user avaliable AMRs which exists factors are not in valid factors
+				1. Error if AMRs are empty
+				2. AuthenticationDetails (2nd factor validation: true)
+			end note
+		end
+		alt if client suppressed actions contains "validate_2nd_factor"
+			note over CheckAuthenticationRequiredDefaultTask: AuthenticationDetails (authentication required: false, 2nd factor validation: false)
+		end
+		alt if user preferrence 2nd validation in user info == true && size of valid factors < 2
+			note over CheckAuthenticationRequiredDefaultTask
+				calculate AMRs from user avaliable AMRs which exists factors are not in valid factors
+				1. Error if AMRs are empty
+				2. AuthenticationDetails (2nd factor validation: true)
+			end note
+		end
+		note over CheckAuthenticationRequiredDefaultTask: AuthenticationDetails (authentication required: false, 2nd factor validation: false)
+	end
+end
+note over CheckAuthenticationRequiredDefaultTask: update session's ACR from authentication details
+alt if user is not anonymous && authentication required == false && RBA is enabled
+	note over CheckAuthenticationRequiredDefaultTask: send request to RBA
+	alt if RBA responses that 2nd factor validation is required && authentication 2nd factor validation is not required
+		note over CheckAuthenticationRequiredDefaultTask: update AuthenticationDetails (2nd factor validation required: true, actions: rbaAction)
+	end
+end
+alt if authentication 2nd factor validation is required && AMRs contains security questions && user questions exists
+	note over CheckAuthenticationRequiredDefaultTask
+		1. random select out security questions
+		2. set questions to AuthenticationDetails's parameter
+	end note
+end
+note over CheckAuthenticationRequiredDefaultTask: set OTP authenticator availabilities to AuthenticationDetails's parameter
+alt if user is not anonymous
+	CheckAuthenticationRequiredDefaultTask --> OAuthIntegrationPointManager: invokeIpAuthorizePostDetermineAuthenticationDetails
+end 
+group generate response
+	alt if authentication is required
+		note over CheckAuthenticationRequiredDefaultTask
+			1. check if prompt contains none
+			2. build response
+		end note
+	else if authentication 2nd factor validation is required
+		note over CheckAuthenticationRequiredDefaultTask
+			1. check if prompt contains none
+			2. get user preferred 2nd factor validation AMRs from user info
+			3. get admin preferred 2nd factor validation AMRs from user info
+			4. build response with new session id
+		end note
+	end
+end
+@enduml

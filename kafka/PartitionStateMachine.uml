@@ -1,0 +1,34 @@
+@startuml
+[*] -> NonExistentPartition
+NonExistentPartition --> NewPartition
+NewPartition --> OnlinePartition
+NewPartition --> OfflinePartition
+OnlinePartition --> OnlinePartition
+OnlinePartition --> OfflinePartition
+OfflinePartition -> OnlinePartition
+OfflinePartition -> OfflinePartition
+OfflinePartition -> NonExistentPartition
+
+state OnlinePartition {
+	[*] -> NewPartition_1
+	NewPartition_1 --> OnlinePartition_1
+	OnlinePartition_1: initialize leaderAndIsr
+	OnlinePartition_1: 1. get replicaAssignment from context
+	OnlinePartition_1: 2. filter liveReplicas from replicaAssignment as new Isr
+	OnlinePartition_1: 3. take first liveReplica as leader
+	OnlinePartition_1: 4. if first liveReplica not exists
+	OnlinePartition_1: .	->error
+	OnlinePartition_1: 4. else
+	OnlinePartition_1: .	->create new leaderAndIsrAndControllerEpoch on zk
+	OnlinePartition_1: .	->add partition with new leaderAndIsrAndControllerEpoch to context
+	OnlinePartition_1: .	->add leaderAndIsr request (isNew = true)
+	--
+	[*] -> OfflinePartition_2
+	OfflinePartition_2 --> OnlinePartition_2
+	OnlinePartition_2: 1. elect leader
+	--
+	[*] -> OnlinePartition_3
+	OnlinePartition_3 -->  OnlinePartition_3
+	OnlinePartition_3: 1. elect leader
+}
+@enduml
