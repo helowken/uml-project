@@ -1,0 +1,156 @@
+@startuml
+start
+note left: Startup 
+
+:register session expiration listener;
+note left
+new zk session is created, emit Reelect event
+end note
+
+:register controller change listener;
+note left
+1. ControllerPath data change, emit ControllerChange event
+2. ControllerPath data deleted, emit Reelect event
+end note
+
+:get controller id from zk;
+
+if (controller id != -1?) then(yes, another broker has been the controller)
+else (no, no one has been the controller)
+	if (set zk's controller id as this broker id, successful?) then (yes, now this broker has been the controller)
+		:set activeControllerId as this broker id;
+		partition onControllerFailover {
+			:read controller epoch from zk;
+			if (increase controller epoch on zk, successful?) then (yes)
+				:delete log dir events on zk;
+				:register PartitionReassignmentListener;
+				note left
+				ReassignPartitionsPath data change
+				emit PartitionReassignment event
+				end note
+
+				:register IsrChangeNotificationListener;
+				note left
+				IsrChangeNotificationPath child change
+				emit IsrChangeNotification event
+				end note
+
+				:register PreferredReplicaElectionListener;
+				note left
+				PreferredReplicaLeaderElectionPath data change
+				emit PreferredReplicaLeaderElection event
+				end note
+
+				:register TopicChangeListener;
+				note left
+				BrokerTopicsPath child change
+				emit TopicChange event
+				end note
+
+				:register TopicDeletionListener;
+				note left
+				DeleteTopicsPath child change
+				emit TopicDeletion event
+				end note
+
+				:register BrokerChangeListener;
+				note left
+				BrokerIdsPath child change
+				emit BrokerChange event
+				end note
+
+				:register LogDirEventNotificationListener;
+				note left
+				LogDirEventNotificationPath child change
+				emit LogDirEventNotification event
+				end note
+
+				partition initControllerContext {
+					:update context cache with data on zk
+					1. get all brokers in cluster
+					2. get all topics
+					3. get replica assignment for topics
+					4. get leaderAndIsr for topics;
+					
+					:start channelManager
+					1. add live brokers to channelManager
+					2. startup requestSendThread for each broker;
+
+					:initialize partition reassignment
+					1. remove deleted and resassigned partitions on zk and context cache
+					2. add beingReassigned partitions to context cache; 
+				}
+
+				:init TopicDeletionManager
+				1. get topicsToBeDeleted from zk
+				2. calculate topicsIneligibleForDeletion
+				3. filter out topicsIneligibleForDeletion from topicsToBeDeleted
+				4. init TopicDeletionManager;
+
+				:sendUpdateMetadataRequest;
+
+				partition startupReplicaMachine {
+					partition initReplicaState {
+						if (replica is online?) then (yes)
+							:OnlineReplica;
+						else (no)
+							:ReplicaDeletionIneligible;
+						endif
+					}
+					:change all liveReplicas' state to OnlineReplica;
+				}
+
+				partition startupPartitionStateMachine {
+					partition initPartitionState {
+						if (partition's leaderAndIsr exists?) then (yes)
+							if (leader is online?) then (yes)
+								:OnlinePartition;
+							else (no)
+								:OffinePartition;
+							endif
+						else (no)
+							:NewPartition;
+						endif
+					}
+					:change state to OnlinePartition, which satisfied
+					1. topic is not to be deleted
+					2. state is OfflinePartition or NewPartition;
+				}
+
+				:register PartitionModificationsListener for each topic;
+				note left
+					topic path data change
+					emit PartitionModifications event
+				end note
+
+				:maybeTriggerPartitionReassignment
+				1. for each partitionBeingReassigned, initiateReassignReplicasForTopicPartition;
+
+				:tryTopicDeletion;
+
+				:fetch and handle pending preferred replica elections;
+
+				:startup KafkaScheduler;
+
+				:schedule AutoPreferredReplicaLeaderElection event if needed;
+			else (no, controller moved to another broker)
+			endif
+		}
+	elseif (zk node exists?) then (yes)
+		:get controller id from zk;
+	else (unknown error) 
+		partition triggerControllerMove {
+			:resign controller
+			1. deregister all listeners from zk
+			2. reset TopicDeletionManager
+			3. shutdown PartitionStateMachine
+			4. shutdown ReplicaStateMachine
+			5. shutdown channelManager
+			6. clear context cache;
+			:set activeControllerId to -1;
+			:delete ControllerPath on zk;
+		}
+	endif
+endif
+stop
+@enduml

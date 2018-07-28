@@ -1,0 +1,33 @@
+@startuml
+start
+while (has more topics queued for deletion?) is (yes)
+	if (all replicas for topic deleted?) then (yes)
+		:completeDeleteTopic
+		1. deregister PartitionModificationsListener for topic
+		2. get replicas with ReplicaDeletionSuccessful state for topic
+		3. change replicas' state to NonExistentReplica
+		4. change partitions' state to OfflinePartition for topic
+		5. change partitions' state to NonExistentPartition for topic
+		6. remove topic related data from zk
+		7. remove topic from controller context;
+	else (no)
+		if (at least one replica in ReplicaDeletionStarted state?) then (yes)
+		else (no)
+			if (any replica in ReplicaDeletionIneligible state?) then (yes)
+				:markTopicForDeletionRetry
+				1. calculate replicas with ReplicaDeletionIneligible state
+				2. change replicas' state to OfflineReplica;
+			endif
+		endif
+	endif
+endwhile (no)
+if (topic is eligible for deletion?) then (yes)
+	:onTopicDeletion
+	1. get partitions for topic from context 
+	2. sendUpdateMetadataRequest for partitions deletion
+	3. calculate replicasForTopicsToBeDeleted (all PartitionAndReplica for topic)
+	4. start replica deletion
+		4.1;
+endif
+stop
+@enduml
