@@ -1,0 +1,18 @@
+@startuml
+start
+note left: PreferredReplicaPartitionLeaderSelector
+:get assignedReplicas from controller context;
+:get firstReplica from assignedReplicas;
+:get currentLeader from controller context;
+if (firstReplica == currentLeader?) then (yes)
+	#Red:error for no need to elect;
+else (no)
+	if (firstReplica is Online and is in current Isr?) then (yes)
+		:create new leaderAndIsr
+		(leader: firstReplica, Isr: current Isr);
+	else (no)
+		#Red:error for that replica is not alive or not in Isr;
+	endif
+endif
+stop
+@enduml

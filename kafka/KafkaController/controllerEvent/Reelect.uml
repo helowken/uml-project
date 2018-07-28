@@ -1,0 +1,9 @@
+@startuml
+start
+note left: Relect
+if (before is active && now is not active) then (yes)
+	:func: onControllerResignation;
+endif
+:func: elect;
+stop
+@enduml

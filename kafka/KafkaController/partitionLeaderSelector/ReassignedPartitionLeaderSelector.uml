@@ -1,0 +1,13 @@
+@startuml
+start
+note left: ReassignedPartitionLeaderSelector
+:get reassignedInSyncReplicas from controller context's partitionsBeingReassigned;
+:find firstReplica from reassignedInSyncReplicas which is online and is in current Isr;
+if (firstReplica is found?) then (yes)
+	:create new leaderAndIsr
+	(leader: firstReplica, Isr: reassignedInSyncReplicas);
+else (no)
+	#Red:error for no replica online;
+endif
+stop
+@enduml

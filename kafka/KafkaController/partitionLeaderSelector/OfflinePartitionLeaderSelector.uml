@@ -1,0 +1,30 @@
+@startuml
+start
+note left: OfflinePartitionLeaderSelector
+:get assignedReplicas from controller context;
+if (assignedReplicas exists?) then (yes)
+	:calculate liveAssignedReplicas, liveBrokersInIsr;
+	if (liveBrokersInIsr is empty?) then (yes)
+		:get config from zk;
+		if (uncleanLeaderElectionEnable == true?) then (yes)
+			if (liveAssignedReplicas is empty?) then (yes)
+				#Red:error for no replica online;
+			else (no)
+				:get firstReplica from liveAssignedReplicas;
+				:create new leaderAndIsr 
+				(leader: firstReplica, Isr: [firstReplica]);
+			endif
+		else (no)
+			#Red:error for no replica online;
+		endif
+	else (no)
+		:filter liveReplicasInIsr from liveAssignedReplicas with liveBrokersInIsr;
+		:get firstReplica from liveReplicasInIsr;
+		:create new leaderAndIsr
+		(leader: firstReplica, Isr: liveBrokersInIsr);
+	endif
+else (no)
+	#Red:error for no replica online;
+endif
+stop
+@enduml

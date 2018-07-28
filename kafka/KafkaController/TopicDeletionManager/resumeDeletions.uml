@@ -1,5 +1,6 @@
 @startuml
 start
+note left: resume deletions
 while (has more topics queued for deletion?) is (yes)
 	if (all replicas for topic deleted?) then (yes)
 		:completeDeleteTopic
@@ -25,9 +26,17 @@ if (topic is eligible for deletion?) then (yes)
 	:onTopicDeletion
 	1. get partitions for topic from context 
 	2. sendUpdateMetadataRequest for partitions deletion
-	3. calculate replicasForTopicsToBeDeleted (all PartitionAndReplica for topic)
+	3. calculate replicasForTopicsToBeDeleted (all PartitionAndReplicas for topic)
 	4. start replica deletion
-		4.1;
+		4.1 calculate aliveReplicasForTopic, deadReplicasForTopic, successfullyDeletedReplicas, replicasForDeletionRetry
+		4.2 change deadReplicasForTopic's state to ReplicaDeletionIneligible
+		4.3 change replicasForDeletionRetry to OfflineReplica
+		4.4 change replicasForDeletionRetry to ReplicaDeletionStarted
+			4.4.1 change replicasThatFailedToDeletion's state to ReplicaDeletionIneligible, 
+					mark topics ineligible for deletion, <b>resume deletions</b>
+			4.4.2 change successfullyDeletedReplicas's state to ReplicaDeletionSuccessful,
+					<b>resume deletions</b>
+		4.5 if deadReplicasForTopic nonEmpty, mark topic ineligible for deletion;
 endif
 stop
 @enduml

@@ -1,0 +1,15 @@
+@startuml
+start
+note left: ControlledShutdownLeaderSelector
+:get assignedReplicas from controller context;
+:calculate liveAssignedReplicas from assignedReplicas include shuttingDown ones;
+:calculate newIsr from current Isr exclude shuttingDown ones;
+:find firstReplica from liveAssignedReplicas, which is in newIsr;
+if (firstReplica is found?) then (yes)
+	:create new leaderAndIsr
+	(leader: firstReplica, Isr: newIsr);
+else (no)
+	#Red:error for no replicas in Isr;
+endif
+stop
+@enduml

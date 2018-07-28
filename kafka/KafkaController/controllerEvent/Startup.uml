@@ -1,0 +1,18 @@
+@startuml
+start
+note left: Startup 
+
+:register session expiration listener;
+note left
+new zk session is created, emit Reelect event
+end note
+
+:register controller change listener;
+note left
+1. ControllerPath data change, emit ControllerChange event
+2. ControllerPath data deleted, emit Reelect event
+end note
+
+:func: elect;
+stop
+@enduml

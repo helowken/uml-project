@@ -1,20 +1,7 @@
 @startuml
 start
-note left: Startup 
-
-:register session expiration listener;
-note left
-new zk session is created, emit Reelect event
-end note
-
-:register controller change listener;
-note left
-1. ControllerPath data change, emit ControllerChange event
-2. ControllerPath data deleted, emit Reelect event
-end note
-
+note left: elect
 :get controller id from zk;
-
 if (controller id != -1?) then(yes, another broker has been the controller)
 else (no, no one has been the controller)
 	if (set zk's controller id as this broker id, successful?) then (yes, now this broker has been the controller)
@@ -140,13 +127,7 @@ else (no, no one has been the controller)
 		:get controller id from zk;
 	else (unknown error) 
 		partition triggerControllerMove {
-			:resign controller
-			1. deregister all listeners from zk
-			2. reset TopicDeletionManager
-			3. shutdown PartitionStateMachine
-			4. shutdown ReplicaStateMachine
-			5. shutdown channelManager
-			6. clear context cache;
+			:func: onControllerResignation;
 			:set activeControllerId to -1;
 			:delete ControllerPath on zk;
 		}

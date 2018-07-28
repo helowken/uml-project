@@ -1,0 +1,11 @@
+@startuml
+start
+note left: controller resignation
+:deregister all listeners from zk;
+:reset TopicDeletionManager;
+:shutdown PartitionStateMachine;
+:shutdown ReplicaStateMachine;
+:shutdown channelManager;
+:clear context cache;
+stop
+@enduml
