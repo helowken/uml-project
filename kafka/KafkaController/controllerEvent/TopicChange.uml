@@ -1,0 +1,19 @@
+@startuml
+start
+note left: TopicChange
+if (isActive?) then(yes)
+	:get currentTopics from zk;
+	:calculate out newTopics and deletedTopics;
+	:get addedPartitionReplicas from zk;
+	:remove deleted topicPartitions from controllerContext's partitionReplicaAssignment;
+	:add addedPartitionReplicas to controllerContext's partitionReplicaAssignment;
+	partition onNewTopicCreation {
+		:register PartitionModificationsListener for topic on zk;
+		:change newPartitions' state to NewPartition;
+		:change replicasForNewPartitions' state to NewReplica;
+		:change newPartitions' state to OnlinePartition;
+		:change replicasForNewPartitions' state to OnlineReplica;
+	}
+endif
+end
+@enduml

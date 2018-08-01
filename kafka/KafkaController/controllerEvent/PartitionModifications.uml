@@ -1,0 +1,20 @@
+@startuml
+start
+note left: PartitionModifications
+if (isActive?) then(yes)
+	:get currentPartitionReplicas for topic from zk;
+	:calculate out newParitionReplicas;
+	if (topicIsQueuedUpForDeletion?) then(yes)
+	else (no)
+		:add newPartitionReplicas to controllerContext's partitionReplicaAssignment;
+		partition onNewTopicCreation {
+			:register PartitionModificationsListener for topic on zk;
+			:change newPartitions' state to NewPartition;
+			:change replicasForNewPartitions' state to NewReplica;
+			:change newPartitions' state to OnlinePartition;
+			:change replicasForNewPartitions' state to OnlineReplica;
+		}
+	endif
+endif
+end
+@enduml

@@ -1,0 +1,33 @@
+@startuml
+start
+note left: BrokerChange
+if (isActive?) then(yes)
+	:get currentBrokers in cluster from zk;
+	:update controllerContext's liveBrokers as currentBrokers;
+	:calculate out newBrokers and deadBrokers;
+	:add newBrokers to channelManager and remove deadBrokers from it;
+	partition onStartupNewBrokers {
+		:remove replicasOnOfflineDirs of newBrokers from controllerContext;
+		:send updateMetadataRequest to liveOrShuttingDownBrokers;
+		note right 
+			oldBrokers can know newBrokers 
+			newBrokers can know allBrokers
+		end note
+		:change allReplicasOnNewBrokers'state to OnlineReplica;
+		:change all new and offline partitions'state to OnlinePartition;
+		:reassign partitionsWithReplicasOnNewBrokers;
+		:resume deletion for topicsWithReplicasOnNewBrokers;
+	}
+	partition onDeadBrokersFail {
+		:remove replicasOnOfflineDirs of deadBrokers from controllerContext;
+		partition replicasOnDeadBrokersBecomeOffline {
+			:change partitionsWithoutLeader's state to OfflinePartition;
+			:change all new and offline partitions'state to OnlinePartition;
+			:change newOfflineReplicasNotForDeletion's state to OfflineReplica;
+			:fail deletion for newOfflineReplicasForDeletion on topicDeletionManager;
+			:send updateMetadataRequest to liveOrShuttingDownBrokers if partitionsWithoutLeader is empty;
+		}
+	}
+endif
+stop
+@enduml

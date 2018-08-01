@@ -1,0 +1,21 @@
+@startuml
+start
+note left: TopicDeletion
+if (isActive?) then(yes)
+	:get topicsToBeDeleted from zk;
+	:calculate out nonExistentTopics;
+	:remove nonExistentTopics from zk;
+	:filter out nonExistentTopics from topicsToBeDeleted;
+	if (deleteTopicEnable?) then(yes)
+		repeat
+			if (partitionReassignmentInProgress for topic?) then(yes)
+				:mark topic ineligibleForDeletion on TopicDeletionManager;
+			endif
+		repeat while (more topic?)
+		:enqueue topicsToBeDeleted for deletion on TopicDeletionManager;
+	else (no)
+		:remove nonExistentTopics from zk;
+	endif
+endif
+stop
+@enduml
