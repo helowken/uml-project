@@ -1,0 +1,12 @@
+@startuml
+start
+note left: TopicDeletionStopReplicaResponseReceived
+if (isActive?) then(yes)
+	:calculate out partitionsInError;
+	:calculate out replicasInError from partitionsInError;
+	:call failReplicaDeletion for replicasInError on TopicDeletionManager;
+	:calculate out deletedReplicas;
+	:call completeReplicaDeletion for deletedReplicas on TopicDeletionManager;
+endif
+stop
+@enduml

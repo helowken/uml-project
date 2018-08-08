@@ -1,0 +1,16 @@
+@startuml
+start
+note left: PartitionReassignment
+if (isActive?) then(yes)
+	:get partitionsBeingReassigned from zk;
+	:calculate out partitionsToBeReassigned;
+	repeat
+		if (partition isTopicQueuedUpForDeletion?) then(yes)
+			:remove partition from zk;
+		else (no)
+			:function: initiateReassignReplicasForTopicPartition();
+		endif
+	repeat while (more partitions to be reassigned?)
+endif
+end
+@enduml

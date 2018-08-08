@@ -1,0 +1,8 @@
+@startuml
+start
+note left: LogDirEventNotification
+:get brokerIds for logDir failure from zk;
+:get replicas for brokerIds from controllerContext's partitionReplicaAssignment;
+:change replicas' state to OnlineReplica to see if they are still online;
+stop
+@enduml

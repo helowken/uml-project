@@ -1,0 +1,24 @@
+@startuml
+start
+note left: ControlledShutdown
+if (isActive?) then(yes)
+	:add brokerId to controllerContext's shuttingDownBrokerIds;
+	:calculate out (partition and replicationFactor) pairs for brokerId;
+	repeat
+		if (replicationFactor > 1?) then(yes)
+			:get currentLeaderAndIsr from controllerContext's partitionLeadershipInfo;
+			if (currentLeader == brokerId?) then(yes)
+				:change partition's state to OnlinePartition with controlledShutdownPartitionLeaderSelector;
+			else(no)
+				:send stopReplicasRequest to brokerId;
+				:change replica's state to OfflineReplica for partition and brokerId;
+			endif
+		endif
+		repeat while(has more (partition, replicationFactor) paris?)
+else(no)
+	#Red:Error for controller moved;
+endif
+:calculate out (partition and replicationFactor) pairs for brokerId;
+:call callback function with (partition and replicationFactor) pairs;
+stop
+@enduml

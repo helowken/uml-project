@@ -111,7 +111,7 @@ else (no, no one has been the controller)
 				end note
 
 				:maybeTriggerPartitionReassignment
-				1. for each partitionBeingReassigned, initiateReassignReplicasForTopicPartition;
+				1. for each partitionBeingReassigned, function: initiateReassignReplicasForTopicPartition();
 
 				:tryTopicDeletion;
 

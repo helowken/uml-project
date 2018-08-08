@@ -1,0 +1,10 @@
+@startuml
+start
+:calculate out partitionsWithoutLeader (leader is offline and topic is not queuedUpForDeletion);
+:change partitionsWithoutLeader's state to OfflinePartition;
+:change all new and offline partitions'state to OnlinePartition;
+:change newOfflineReplicasNotForDeletion's state to OfflineReplica;
+:call failReplicaDeletion for newOfflineReplicasForDeletion on topicDeletionManager;
+:send updateMetadataRequest to liveOrShuttingDownBrokers if partitionsWithoutLeader is empty;
+stop
+@enduml

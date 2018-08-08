@@ -1,0 +1,17 @@
+@startuml
+start
+note left: PartitionReassignmentIsrChange
+note left: PartitionReassignmentIsrChange
+if (isActive?) then(yes)
+	:get leaderAndIsr from zk;
+	if (leaderAndIsr exists?) then(yes)
+		:calculate out caughtUpReplcias(intersection between reassignedReplicas and isr); 
+		if (caughtUpReplicas == reassignedReplicas?) then(yes)
+			:function: onPartitioinReassignment();	
+		else(no)
+			:means reassignment is undergoing, wait for its finish;
+		endif
+	endif
+endif
+stop
+@enduml

@@ -1,0 +1,44 @@
+@startuml
+start
+note left: onPartitionReassignment
+:get leaderAndIsr from zk;
+if (reassignedReplicas are all in isr?) then (no)
+	:calculate out newReplicasNotInOldReplicaList;
+	:calculate out newAndOldReplicas;
+	:update zk and controllerContext's partitionReplicaAssignment 
+	with newAndOldReplicas for topicPartition;
+	:send leaderAndIsrRequest for newAndOldReplicas;
+	:change newReplicasNotInOldReplicaList'state to NewReplica;
+else (no)
+	:calculate out oldReplicas;
+	:change reassignedReplicas's state to OnlineReplica;
+	partition moveReassignedPartitionLeaderIfRequired {
+		:get currentLeader from controllerContext's partitionLeadershipInfo;
+		:update controllerContext's partitionReplicaAssignment with reassignedReplicas;
+		if (reassignedReplicas doesn't contain currentLeader?) then (yes)
+			:change partition's state to OnlinePartition 
+			with reassignedPartitionLeaderSelector for new leader election;
+		else (no)
+			if (currentLeader is online?) then (yes) 
+				:send leaderAndIsrRequest to oldAndNewReplicas(brokers) 
+				for updating partition with reassignedReplicas;
+			else (no)
+				:change partition's state to OnlinePartition 
+				with reassignedPartitionLeaderSelector for new leader election;
+			endif
+		endif
+	}
+	partition stopOldReplicasOfReassignedPartition {
+		:change oldReplicas's state to OfflineReplica;
+		:change oldReplicas's state to ReplicaDeletionStarted;
+		:change oldReplicas's state to ReplicaDeletionSuccessful;
+		:change oldReplicas's state to NonExistentReplica;
+	}
+	:update zk and controllerContext's partitionReplicaAssignment 
+	with reassignedReplicas for topicPartition;
+	:remove partition from reassignedPartitions on zk and controllerContext's partitionsBeingReassigned;
+	:send leaderAndIsrRequest for reassignedReplicas;
+	:resume deletion on TopicDeletionManager;
+endif
+stop
+@enduml

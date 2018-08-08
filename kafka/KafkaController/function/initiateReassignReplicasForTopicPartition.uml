@@ -1,0 +1,13 @@
+@startuml
+start
+note left: initiateReassignReplicasForTopicPartition
+:get assignedReplicas from controllerContext's partitionReplicasAssignment;
+if (assignedReplcas == newReplicas?) then (yes)
+	#Red:Error for already assigned, no need to go on;
+else (no)
+	:create PartitionReassignmentIsrChangeListener on zk;
+	:mark partition's topic ineligible for deletion on TopicDeletionManager;
+	:function: onPartitionReassignment();
+endif
+stop
+@enduml

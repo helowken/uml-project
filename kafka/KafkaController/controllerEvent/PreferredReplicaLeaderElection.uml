@@ -1,0 +1,9 @@
+@startuml
+start
+note left: PreferredReplicaLeaderElection
+:get partitions for preferredReplicaLeaderElection from zk;
+:filter out partitionsForTopicToBeDeleted;
+:change partitions' state to OnlinePartition with preferredReplicaPartitionLeaderSelector;
+:remove partitions for preferredReplicaLeaderElection from zk;
+stop
+@enduml

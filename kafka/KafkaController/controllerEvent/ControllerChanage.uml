@@ -1,0 +1,8 @@
+@startuml
+start
+note left: ControllerChange
+if (controller is changed?) then(yes)
+	:function: onControllerResignation();
+endif
+stop
+@enduml

@@ -20,13 +20,7 @@ if (isActive?) then(yes)
 	}
 	partition onDeadBrokersFail {
 		:remove replicasOnOfflineDirs of deadBrokers from controllerContext;
-		partition replicasOnDeadBrokersBecomeOffline {
-			:change partitionsWithoutLeader's state to OfflinePartition;
-			:change all new and offline partitions'state to OnlinePartition;
-			:change newOfflineReplicasNotForDeletion's state to OfflineReplica;
-			:fail deletion for newOfflineReplicasForDeletion on topicDeletionManager;
-			:send updateMetadataRequest to liveOrShuttingDownBrokers if partitionsWithoutLeader is empty;
-		}
+		:replicasOnDeadBrokersBecomeOffline, function: onReplicasBecomeOffline();
 	}
 endif
 stop

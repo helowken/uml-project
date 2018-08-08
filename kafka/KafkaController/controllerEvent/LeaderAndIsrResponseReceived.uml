@@ -1,0 +1,16 @@
+@startuml
+start
+if (response has error?) then(no)
+	:calculate out offlineReplicas;
+	:calculate out onlineReplicas;
+	:calculate out previousOfflineReplicas;
+	:calculate out currentOfflineReplicas;
+	note right: previousOfflineReplicas - onlineReplicas + offlineReplicas
+	:calculate out newOfflineReplicas;
+	note right: currentOfflineReplicas - previousOfflineReplicas
+	if (newOfflineReplicas is nonEmpty?) then(yes)
+		:function: onReplicasBecomeOffline();	
+	endif
+endif
+stop
+@enduml

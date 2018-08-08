@@ -1,0 +1,14 @@
+@startuml
+start
+note left: IsrChangeNotification
+if (isActive?) then(yes)
+	:get partitions for isrChange from zk;
+	if (partitions is nonEmpty?) then(yes)
+		:get leaderAndIsr for partitions from zk;
+		:update controllerContext's partitionLeadershipInfo;
+		:send updateMetadataReuqest to liveBrokers with these partitions;
+	endif
+	:remove isrChange from zk;
+endif
+stop
+@enduml

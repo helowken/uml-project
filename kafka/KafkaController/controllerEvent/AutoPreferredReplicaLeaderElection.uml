@@ -1,0 +1,24 @@
+@startuml
+start
+note left: AutoPreferredReplicaLeaderElection
+if (isActive?) then(yes)
+	:filter partitionReplicas not for topicQueuedUpForDeletion;
+	:group by head of replicas of partitionReplicas, calculate out preferredReplicasForTopicsByBrokers;
+	repeat
+		:(leaderBroker, topicAndPartitionsForBroker) filter topicsNotInPreferredReplica from topicAndPartitionsForBroker;
+		if (topicsNotInPreferredReplica.size / topicAndPartitionsForBroker.size > config.leaderImbalancePerBrokerPercentage?) then(yes)
+			repeat
+				if (leaderBroker is online 
+&& controllerContext's partitionsBeingReassigned is empty
+&& topic is not queued up for deletion
+&& controllerContext's allTopics contains topic) then(yes)
+					:change partition's state to OnlinePartition with preferredReplicaPartitionLeaderSelector;
+				endif
+			repeat while (topicsNotInPreferredReplica has more?)
+		endif
+	repeat while (preferredReplicasForTopicsByBrokers has more?)
+
+endif
+:scheduleAutoLeaderRebalanceTask;
+stop
+@enduml
