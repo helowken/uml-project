@@ -1,0 +1,68 @@
+@startuml
+object SocketServer
+object EndPoint
+object Acceptor
+object Processor
+object RequestChannel
+object Request
+object Response
+object NioSelector_Accept
+object NioSelector_RW
+object SelectionKey_Accept
+object SelectionKey_RW
+object ServerSocketChannel
+object SocketChannel
+object KafkaSelector
+object ChannelBuilder
+object KafkaChannel
+object NetworkReceive
+object Send
+object TransportLayer
+object Authenticator
+object KafkaRequestHandlerPool
+object KafkaRequestHandler
+object KafkaApis
+
+SocketServer *--> "many" Acceptor
+note right of SocketServer: Reactor with MultiThread
+
+Acceptor o--> "many" Processor
+Acceptor *--> NioSelector_Accept 
+Acceptor *--> ServerSocketChannel
+
+ServerSocketChannel ..> EndPoint: bind address
+ServerSocketChannel ..> NioSelector_Accept: register
+
+NioSelector_Accept *--> "many" SelectionKey_Accept
+SelectionKey_Accept ..> SocketChannel: accpet
+
+Processor *--> KafkaSelector 
+Processor ..> EndPoint: decide protocol
+
+KafkaSelector *--> ChannelBuilder
+KafkaSelector *--> NioSelector_RW
+KafkaSelector *--> "many" KafkaChannel
+
+ChannelBuilder ..> KafkaChannel: create
+
+SocketChannel ..> NioSelector_RW: register
+NioSelector_RW *--> SelectionKey_RW
+
+KafkaChannel *--> TransportLayer 
+KafkaChannel *--> Authenticator
+
+TransportLayer ..> SelectionKey_RW
+TransportLayer ..> NetworkReceive: read data
+NetworkReceive ..> Request: parse
+TransportLayer ..> Send: write data
+
+KafkaRequestHandlerPool *--> "many" KafkaRequestHandler
+KafkaRequestHandler ..> RequestChannel: get requests
+KafkaRequestHandler ..> KafkaApis: process requests
+
+KafkaApis ..> Response: create
+Response ..> Send: serialize
+RequestChannel o--> Request
+RequestChannel o--> Send: track request
+
+@enduml
