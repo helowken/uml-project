@@ -1,0 +1,42 @@
+@startuml
+start
+note left: KafkaSelector pollSelectionKeys()
+:shuffle selectionKeys if is not outOfMemory but memory is not enough;
+while (has more selectionKeys?) 
+	:get KafkaChannel from key;
+	if (key is immediatelyConnected || key is connectable?) then(yes)
+		if (KafkaChannel finish connect?) then(yes)
+			:add KafkaChannel to connected queue;
+		else(no)
+			:continue;
+		endif
+	endif
+	if (KafkaChannel is connected && channel is not ready?) then(yes)
+		:KafkaChannel prepare
+		1. TransportLayer handshake
+		2. Authenticator authenticate;
+	endif
+	partition attemptRead {
+		if (KafkaChannel is ready 
+			&& [key is readable || KafkaChannel has bytes buffered]
+			&& has no stagedReceive
+			&& KafkaChannel is not muted explictly) then(yes)
+			repeat
+				:1. read networkReceive from KafkaChannel, if read is finished, networkReceive will be not null
+				2. add networkReceive to stagedReceives if networkReceive is not null;
+			repeat while (networkReceive is not null, continue to read more)
+		endif
+	}
+	if (KafkaChannel has bytes buffered?) then(yes)
+		:add key to keysWithBufferedRead;
+	endif
+	if (KafkaChannel is ready && key is writable?) then(yes)
+		:1. call TransportLayer to write Send
+		2. add Send to completedSends if write is finished;
+	endif
+	if (key is invalid?) then(yes)
+		:close corresponding KafkaChannel;
+	endif
+endwhile
+stop
+@enduml

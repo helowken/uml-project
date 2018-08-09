@@ -1,0 +1,22 @@
+@startuml
+start
+:open nioSelector;
+:open ServerSocketChannel and bind EndPoint address;
+:register ServerSocketChannel on nioSelector;
+while (isRunning?)
+	:nioSelector selects keys (with a timeout);
+	if (selectedKeys is not empty?) then(yes)
+		while (has more keys)
+			if (key is acceptable?) then(yes)
+				:check whether connection quotas exceed;
+				:find a processor accept this key
+				1. add socketChannel of key to newConnections queue
+				2. wakeup kafkaSelector to process;
+			else (no)
+				#Red:Error for unrecognized key state;
+			endif
+		endwhile
+	endif
+endwhile
+stop
+@enduml

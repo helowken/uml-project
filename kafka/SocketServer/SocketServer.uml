@@ -63,6 +63,6 @@ KafkaRequestHandler ..> KafkaApis: process requests
 KafkaApis ..> Response: create
 Response ..> Send: serialize
 RequestChannel o--> Request
-RequestChannel o--> Send: track request
+RequestChannel o--> Response: track request
 
 @enduml

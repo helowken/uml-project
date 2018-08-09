@@ -1,0 +1,28 @@
+@startuml
+start
+note left: KafkaSelector poll()
+:clear the results from the prior poll;
+:calculate select timeout, maybe set to 0 if has immediately operate keys;
+:unmute all channels if broker is no longer low on memory;
+:nioSelector select(maybe with a timeout);
+if (selectedKeys is nonEmpty 
+	|| immediatelyConnectedKeys is nonEmpty
+	|| keysWithBufferedRead is nonEmpty) then(yes)
+	:get readyKeys from nioSelector;
+	if (keysWithBufferedRead is nonEmpty) then(yes)
+		:1. remove readyKeys from keysWithBufferedRead
+		2. pollSelectionKeys(keysWithBufferedRead);
+	endif
+	:pollSelectionKeys(readyKeys);
+	:pollSelectionKeys(immediatelyConnectedKeys);
+endif
+:close oldest connections if expired;
+partition addToCompleteReceives {
+	while (has more stagedReceives?)
+		if (corresponding channel is not muted explictly?) then(yes)
+			:poll networkReceive from stagedQueue and put into completedReceives;
+		endif
+	endwhile
+}
+stop
+@enduml

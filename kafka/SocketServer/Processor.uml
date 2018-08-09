@@ -1,0 +1,45 @@
+@startuml
+start
+:create ChannelBuilder with EndPoint's protocol;
+:create KafkaSelector with ChannelBuilder;
+while (isRunning?)
+	partition configureNewConnections {
+		while (newConnections is nonEmpty?) 
+			:register newConnection(socketChannel) on KafkaSelector;
+		endwhile
+	}
+	partition processNewResponses {
+		while (has more receiveResponses?)
+			:get action of response;
+			if (NoOpAction?) then(yes)
+				:unmute corresponding KafkaChannel;
+			elseif (SendAction?) then(yes)
+				:send response;
+			elseif (CloseConnectionAction?) then(yes)
+				:close KafkaChannel;
+			endif
+		endwhile
+	}
+	partition poll {
+		:KafkaSelector poll;
+	}
+	partition processCompletedReceives {
+		while (has more completed receives?)
+			:1. parse receive to a request
+			2. send request to RequestChannel
+			3. mute corresponding KafkaChannel;
+		endwhile
+	}
+	partition processCompletedSends {
+		while (has more completed sends?)
+			:unmute corresponding KafkaChannel;
+		endwhile
+	}
+	partition processDisconnected {
+		while (has more disconnected channel?)
+			:decrease connectionQuotas;
+		endwhile
+	}
+endwhile
+stop
+@enduml
