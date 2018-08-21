@@ -1,0 +1,57 @@
+@startuml
+start
+note left: make leaders
+:remove fetchers for partitionsToBeLeader
+(leader has no need to fetch from other brokers);
+
+while (has more partitionAndState pairs?) 
+	partition makeLeader {
+		while (has more partitionState's replicas?)
+			partition getOrCreateReplica {
+				if (replica is local broker?) then(yes)
+					:get or create a log for topicPartition;
+					:read checkpointOffset from "replication-offset-checkpoint" file for topicPartition;
+					:calculate minOffset between checkPointOffset and logEndOffset;
+					:create replica with a log and highWatermark(minOffset);
+				else
+					:create replica without log and highWatermark
+					(followerReplica no need to keep these infos);
+				endif
+			}
+		end while
+
+		:remove partition's replicas that are not contained in partitionState's replicas;
+		:update partition's controllerEpoch, leaderEpoch, zkVersion, inSyncReplicas;
+		:reset fetchLogEndOffset and lastCaughtUpTime for followerReplicas(all replicas except leaderReplica);
+
+		if (broker is new leader for this partition?) then(yes)
+			:convert highWatermark for leaderReplica
+			1. try to find a segment that contains highWatermark's messageOffset
+			2. if not found, use logStartOffset as highWatermark's messageOffset and find again
+			3. if still not found, use the first segment's baseOffset as highWatermark's messageOffset;
+
+			:reset notLocalReplicas' fetchLogReadResults to unknown;
+		endif
+
+		:find out the minLogEndOffset from allReplicas which are inSync or caughtUp;
+		if (leaderReplica highWatermark's messageOffset < minLogEndOffset \n|| they are equal but leaderReplica's highWatermark is on older segment?) then(yes)
+			:update leaderReplica's highWatermark with minLogEndOffset;
+		endif
+
+		if (leaderReplica's highWatermark is incremented?) then(yes)
+			:try complete delayed requests
+			1. delayed fetch requests
+			2. delayed produce requests
+			3. delayed delete requests;
+		endif
+	}
+	if (partition make leader successful?) then(yes)
+		:collect partition into leaderPartitions;
+	elseif (error occurs?) then(yes)
+		:mark topicPartition 
+		as KAFKA_STORAGE_ERROR error;
+	endif
+end while
+:return leaderPartitions;
+stop
+@enduml

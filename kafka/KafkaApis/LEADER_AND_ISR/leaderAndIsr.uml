@@ -1,0 +1,46 @@
+@startuml
+start
+note left: handle leaderAndIsrRequest
+if (authorize pass?) then(yes)
+	if (request.controllerEpoch < currentControllerEpoch?) then(yes)
+		#Red:send STALE_CONTROLLER_EPOCH 
+		error response;
+	else(no)
+		:update currentControllerEpoch;
+		:get partitionStates from request;
+		while (has more partitionStates?)
+			:get or create a partition for partitionState;
+			
+			if (partition is offline?) then(yes)
+				:mark topicPartition 
+				as KAFKA_STORAGE_ERROR error;
+			elseif (partition.leaderEpoch < partitionState.leaderEpoch?) then(yes)
+				if (partitionState.replicas contains localBrokerId?) then(yes)
+					:collect partition and partitionState pair;
+				else(no)
+					:mark topicPartition 
+					as UNKNOWN_TOPIC_OR_PARTITION error;
+				endif
+			else(no)
+				:makr topicPartition 
+				as STALE_CONTROLLER_EPOCH error;
+			endif
+		end while
+
+		:filter partitionsToBeLeader from collected partitionAndState pairs 
+		which leader == localBrokerId;
+
+		:filter partitionsToBeFollower from collected partitionAndState pairs 
+		which leader != localBrokerId;
+
+		:make leaders;
+		:make followers;
+	endif
+
+	:send leaderAndIsr response;
+else(no)
+	#Red:send CLUSTER_AUTHORIZATION_FAILED 
+	error response;
+endif
+stop
+@enduml

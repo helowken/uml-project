@@ -1,0 +1,40 @@
+@startuml
+start
+note left: make followers
+while (has more partitionAndState pairs?) 
+	:find aliveLeaderBroker for partition from metadataCache;
+	if (aliveLeaderBroker exists?) then(yes)
+		partition makeFollower {
+			:update partitions's controllerEpoch, leaderEpoch, zkVersion;
+			:set partition's inSyncReplica to an empty set
+			(follower'll not has follower in sync);
+			:remove partition's replicas that are not contained in partitionState's replicas;
+			if (leader has changed?) then(yes)
+				:return true (need to make follower);
+			else
+				:return false (no need to make follower);
+			endif
+		}
+		if (partition make follower successful?) then(yes)
+			:collect partition into followerPartitions;
+		endif
+	else(no)
+		:get or create a replica for partition;
+	endif
+
+	if (error occurs?) then(yes)
+		:mark partition as KAFKA_STORAGE_ERROR;
+	endif
+end while
+:remove fetchers for followerPartitions;
+
+:try to complete delayed requests for followerPartitions 
+1. delayed produce requests
+2. delayed fetch requests;
+
+if (shutdown?) then(no)
+	:find aliveBroker endpoints for followerPartitions;
+	:add fetchers with aliveBroker endpoint and logEndOffset for followerPartitions;
+endif
+stop
+@enduml

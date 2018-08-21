@@ -1,0 +1,14 @@
+@startuml
+class OffsetPosition {
+	offset: long
+	position: int
+}
+class TimestampOffset {
+	timestamp: long
+	offset: long
+}
+
+OffsetIndex *--"many" OffsetPosition
+TimeIndex *--"many" TimestampOffset
+
+@enduml

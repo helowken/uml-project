@@ -1,0 +1,151 @@
+@startuml
+start
+note left: LogManager init;
+
+:createAndValidateLogDirs
+1. filter not offlineDirs
+2. mkdirs if not exists
+3. add to liveLogDirs if is directory and can read;
+
+if (liveLogDirs isEmpty?) then(yes)
+	#Red:Exit for no log dirs can be created or validated;
+endif
+
+:lock liveLogDirs
+1. create .lock file with RW privileges if not exists
+2. try to lock .lock file throught file channel;
+
+partition loadLogs {
+	while (has more logDirs?)
+		:set brokerState to RecoveringFromUncleanShutdown if ".kafka_cleanshutdown" file not exists;
+		
+		:load recoveryPoints from "recovery-point-offset-checkpoint" file;
+		:load logStartOffsets from "log-start-offset-checkpoint" file;
+
+		fork
+			:load topicPartition-0 log dir;
+			partition loadLogForTopicPartition {
+				:parse topicPartition from logDir's name;
+				:get recoveryPoint for topicPartition;
+				:get logStartOffset for topicPartition;
+
+				partition newLog {
+					:init leaderEpochCache for log;
+					
+					partition loadSegments {
+						partition removeTempFilesAndCollectSwapFiles {
+							while (has more file and file isFile?)
+								if (file can't be read?) then(yes)
+									#Red: Error for reading file;
+								endif
+								if (file name ends with ".deleted" or ".cleaned"?) then(yes)
+									:delete file;
+								elseif (file name ends with ".swap"?) then(yes)
+									if (it's a index swap file?) then(yes)
+										:delete it;
+									elseif (it's a log swap file?) then(yes)
+										:collect it to swapFiles;
+										:delete index, timeindex and transactionIndex files if exist;
+									endif
+								endif
+							end while
+							:return swapFiles;
+						}
+
+						partition loadSegmentFiles {
+							while (has more files and isFile?)
+								if (is index file?) then(yes)
+									:delete it if the corresponding log file not exists;
+								elseif (is log file?) then(yes)
+								:do sanity check for index, timeindex and transactionIndex files;
+								:recoverSegment if any sanity checks fail;
+								else(no)
+									partition recoverSegment {
+										:truncate and reload producer states between logStartOffset and segment's baseOffset;
+										:find segments from lastSnapshotOffset and segment's baseOffset, load producers from log;
+										:take a snapshot to avoid reloading all segments;
+										partition recover {
+											:reset index, timeindex and transactionIndex files;
+											while (has more recordBatches?) 
+												:validate batch;
+												:calculate the maxTimestamp and offsetOfMaxTimestamp;
+
+												:append index(batch's baseOffset, currentTotalValidBytes) to index file, 
+												and append timeindex(maxTimestamp and offsetOfMaxTimestamp) to timeindex file
+												if accumulated valid bytes are enough;
+
+												:update latest leaderEpoch if batch's partitionLeaderEpoch > cache's lastEpoch;
+
+												:update producer state
+												1. append batch info to transaction queue if contains producer id
+												2. complete transaction if batch is a controlBatch and transaction is openning
+												3. append transaction index if the completed transaction is aborted
+												2. update ProducerStateManager's mapEndOffset;
+											endwhile
+										}
+										:take a snapshot after recover segment;
+										:calculate truncated bytes(invalid bytes) after recover;
+									}
+								endif
+							end while
+						}
+
+						partition completeSwapOperations {
+							while (has more swapFiles?) 
+								:new a swapLogSegment from swap files(log, index, timeindex, transactionIndex);
+								:recover this swapLogSegment;
+								:find oldSegments between swapLogSegment's baseOffset and nextOffset;
+								:replace oldSegments by the swapSegment and delete them asynchronous;
+							end while
+						}
+
+						if (segments isEmpty?) then(yes)
+							:add a segment with 0 startOffset;
+							:return 0 as nextOffset;
+						elseif (logDir's name doesn't end with "-delete"?) then(yes)
+							partition recoverLog {
+								if (".kafka_cleanshutdown" file exists?) then(no)
+									:find unflushedSegments beyond the recoveryPoint;
+									while (has more unflushedSegments?)
+										:recoverSegment;
+										if (after recovery, truncted bytes > 0?) then(yes)
+											:delete the rest unflushedSegments;
+											:break loop;
+										endif
+									end while
+								endif
+								:get last segment's nextOffset as recoveryPoint;
+							}
+							:resize the last segment's index and timeindex file;
+							:return nextOffset from recoverLog;
+						else(no)
+							:return 0 as nextOffset;
+						endif
+					}
+					
+					:get nextOffset after loadSegments and create nextLogOffsetMetadata; 
+					:clean and flush latest leaderEpochCache with nextOffset;
+
+					:calculate the new logStartOffset: 
+					max(logStartOffset, first segment's baseOffset);
+
+					:clean and flush earliest leaderEpochCache with logStartOffset;
+					:load producer state from logEndOffset(todo);
+				}
+
+				if (logDir's name ends with "-delete"?) then(yes)
+					:add to a queue for deleting in background;
+				else
+					:put log to LogManager's logs pool;
+					if (there's a previous log for the same partition?) then(yes)
+						#Red:Error for duplicate log directories;
+					endif
+				endif
+			}
+		fork again
+			:load topicPartition-N log dir;
+		end fork
+	endwhile
+}
+stop
+@enduml
