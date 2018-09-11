@@ -5,17 +5,98 @@ if (sourceCodec and targetCodec is noCompression?) then(yes)
 	if (any batch's magic != latest message magic?) then(yes)
 		partition convertAndAssignOffsetsNonCompressed {
 			:estimate sizeInBytes;
-			:get producerId, producerEpoch, baseSequence, isTransactional from the first batch;
-			:allocate a ByteBuffer with estimate size, and create a memoryRecordsBuildfer
+			:allocate a ByteBuffer with estimate size, and create a memoryRecordsBuildfer;
+			:create a new MemoryRecords builder with buffer;
+			
+			while (has more batches in records?)
+				:validate batch;
+				while (has more records in batch?)
+					:validate record;	
+					:append record to builder with a increment offset
+					(func: appendWithOffset); 
+				end while
+			end while
+
+			:build convertedRecords from builder (func: build);
+			:get info from builder (func: info);
+			:create and return a ValidationAndOffsetAssignResult;
 		}
 	else(no)
 		partition assignOffsetsNonCompressed {
-
+			:mark down initialOffset;
+			while (has more batches in records?)
+				:validate batch;
+				while (has more records in batch?)
+					:validate record;
+					:calculate maxBatchTimestamp and offsetOfMaxBatchTimestamp;
+				end while
+				if (batch.magic > 0 && maxBatchTimestamp > maxTimestamp?) then(yes)
+					:set maxTimestamp to maxBatchTimestamp
+					set offsetOfMaxTimestamp to offsetOfMaxBatchTimestamp;
+				endif
+				:set batch's lastOffset to current offset - 1;
+				:update batch's partitionLeaderEpoch if batch.magic >= 2;
+				if (timestampType == LOG_APPEND_TIME?) then(yes)
+					:set batch's maxTimestamp to LOG_APPEND_TIME and current time;
+				else(no)
+					:set batch's maxTimestamp to timestampType and maxBatchTimestamp;
+				endif
+			end while
+			if (timestampType == LOG_APPEND_TIME?) then(yes)
+				:set maxTimestamp to current time;
+				if (magic >= 2?) then(yes)
+					:set offsetOfMaxTimestamp to current offset - 1;
+				else(no)
+					:set offsetOfMaxTimestamp to initialOffset;
+				endif
+			else(no)
+			endif
+			:create and return a ValidationAndOffsetAssignResult;
 		}
 	endif
 else(no)
 	partition validateMessagesAndAssignOffsetsCompressed {
-
+		if (sourceCodec == targetCodec && magic > 0?) then(yes)
+			:set inPlaceAssignment to true;
+		else(no)
+			:set inPlaceAssignment to false;
+		endif
+		:create an expectedInnerOffset;
+		while (has more batches in records?) 
+			:validate batch;
+			:add batchHeaderSize to uncompressedSize;
+			:set inPlaceAssignment to true if sourceCodec is no compression && batch is a controlBatch;
+			while (has more records in batch?)
+				:validate record;
+				:error if sourceCodec is compression and record is compressed too;
+				:add record size to uncompressedSize;
+				if (batch's magic > 0 and magic > 0?) then(yes)
+					:set inPlaceAssignment to false if record's offset != expectedInnerOffset;
+					:increase expectedInnerOffset;
+					:calculate maxTimestamp;
+				endif
+				:set inPlaceAssignment to false if record doesn't support magic;
+				:append record to validatedRecords;
+			end while
+		end while
+		if (inPlaceAssignment?) then(yes)
+			:get first batch from records;
+			:update batch's last offset to (current offset + validatedRecords's size - 1);
+			:set maxTimestamp to current time if timestampType is LOG_APPEND_TIME;
+			:update batch's maxTimestamp if magic >= 1;
+			:update batch's partitionLeaderEpoch if magic >= 2;
+			:create and return a ValidationAndOffsetAssignResult;
+		else(no)
+			partition buildRecordsAndAssignOffset {
+				:estimate size of records;
+				:allocate a ByteBuffer with estimatedSize;
+				:create a MemoryRecords builder with buffer;
+				:append all validatedRecords with increment offsets to builder (func: appendWithOffset);
+				:build records from builder (func: build);
+				:get info from builder (func: info);
+				:create and return a ValidationAndOffsetAssignResult;
+			}
+		endif
 	}
 endif
 stop
