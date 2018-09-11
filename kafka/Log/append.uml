@@ -1,0 +1,32 @@
+@startuml
+start
+note left: Log.append
+:create appendInfo from analyzeAndValidateRecords;
+partition analyzeAndValidateRecords {
+	:for batches in records
+	1. validate the magic of batch
+	2. calculate the firstOffset and lastOffset for records
+	3. check whether the offsets of records are monotonic
+	4. check whether batch size exceeds maxMessageSize in config
+	5. check whether batch is valid(includes the size and the checksum)
+	6. calculate the maxTimestamp and offsetOfMaxTimestamp for records
+	7. calculate shallowCount(valid batch count) and validBytesCount for records
+	8. calculate sourceCodec for records;
+
+	:calculate targetCodec by sourceCodec for records
+	1. if config.compressionType == "producer", use sourceCodec
+	2. or use the compressionCodec in config;
+
+	:return LogAppendInfo;
+}
+
+if (appendInfo.shallowCount > 0?) then(yes)
+	:trim invalid bytes of records if appendInfo.validBytes != records.sizeInBytes;
+
+	if (assignOffsets?) then(yes)
+		:update appendInfo.firstOffset to log's nextOffset;
+		:calculate a result from validateMessagesAndAssignOffsets;
+	endif
+endif
+stop
+@enduml

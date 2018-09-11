@@ -3,8 +3,8 @@ start
 note left: handle leaderAndIsrRequest
 if (authorize pass?) then(yes)
 	if (request.controllerEpoch < currentControllerEpoch?) then(yes)
-		#Red:send STALE_CONTROLLER_EPOCH 
-		error response;
+		#Red:return error result 
+		STALE_CONTROLLER_EPOCH;
 	else(no)
 		:update currentControllerEpoch;
 		:get partitionStates from request;
@@ -33,8 +33,44 @@ if (authorize pass?) then(yes)
 		:filter partitionsToBeFollower from collected partitionAndState pairs 
 		which leader != localBrokerId;
 
-		:make leaders;
-		:make followers;
+		:try to make partitionsToBeLeader to be leaders;
+		:try to make partitionsToBeFollower to be followers;
+
+		while (has more partition in collected partitionAndState pairs?) 
+			if (partition doesn't contain local replica \n&& partition is not offline?) then(yes)
+				:set partition as an OfflinePartition;
+			endif
+		end while
+
+		if (it's the first time to handle request?) then(yes)
+			partition schedulePeriodically {
+				:filter out onlinePartitionsWithLocalReplica;
+				:write their (topicPartition -> highWatermark's messageOffset) 
+				pairs to checkpoint files;
+			}
+		endif
+
+		:shutdown idle fetcher threads;
+	
+		partition onLeadershipChange {
+			while (has more partitionsOfUpdatedLeaders?)
+				if (partition.topic == GROUP_METADATA_TOPIC_NAME?) then(yes)
+					:handle group immigration;
+				elseif (partition.topic == TRANSACTION_STATE_TOPIC_NAME?) then(yes)
+					:handle transaction immigration;
+				endif
+			end while
+
+			while (has more partitionsOfUpdatedFollowers?)
+				if (partition.topic == GROUP_METADATA_TOPIC_NAME?) then(yes)
+					:handle group immigration;
+				elseif (partition.topic == TRANSACTION_STATE_TOPIC_NAME?) then(yes)
+					:handle transaction immigration;
+				endif
+			end while
+		}
+
+		:return normal result;
 	endif
 
 	:send leaderAndIsr response;

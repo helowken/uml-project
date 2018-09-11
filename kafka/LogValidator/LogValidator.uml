@@ -1,0 +1,22 @@
+@startuml
+start
+note left: validateMessagesAndAssignOffsets
+if (sourceCodec and targetCodec is noCompression?) then(yes)
+	if (any batch's magic != latest message magic?) then(yes)
+		partition convertAndAssignOffsetsNonCompressed {
+			:estimate sizeInBytes;
+			:get producerId, producerEpoch, baseSequence, isTransactional from the first batch;
+			:allocate a ByteBuffer with estimate size, and create a memoryRecordsBuildfer
+		}
+	else(no)
+		partition assignOffsetsNonCompressed {
+
+		}
+	endif
+else(no)
+	partition validateMessagesAndAssignOffsetsCompressed {
+
+	}
+endif
+stop
+@enduml

@@ -1,0 +1,41 @@
+@startuml
+start
+note left: find out how systemEnvironment be registered
+partition AbstractApplicationContext_refresh {
+	:prepareRefresh();
+	:obtainFreshBeanFactory();
+
+	partition prepareBeanFactory {
+		if (beanFactory.containsLocalBean(SYSTEM_ENVIRONMENT_BEAN_NAME)?) then(no)
+			:set env = getEnvironment().getSystemEnvironment();
+			partition getSystemEnvironment {
+				if (value of "spring.getenv.ignore" in spring config == false?) then(yes)
+					:return System.getenv();
+				endif
+			}
+			:beanFactory.registerSingleton(SYSTEM_ENVIRONMENT_BEAN_NAME, env);
+		endif
+	}
+	note right: SYSTEM_ENVIRONMENT_BEAN_NAME = "systemEnvironment"
+
+	:postProcessBeanFactory(beanFactory);
+
+	:invokeBeanFactoryPostProcessors(beanFactory);
+
+	partition PostProcessorRegistrationDelegate_invokeBeanFactoryPostProcessors {
+		:beanFactory.getBeanNamesForType(BeanFactoryPostProcessor.class, ...);
+		note right
+		So we can add a bean which implements 
+		BeanFactoryPostProcessor interface to 
+		overwrite the "systemEnvironment" singleton bean;
+		end note
+
+		:get postProcessors by beanNames;
+
+		while (has more postProcessors?) 
+			:postProcessor.postProcessBeanFactory(beanFactory);
+		end while
+	}
+}
+stop
+@enduml

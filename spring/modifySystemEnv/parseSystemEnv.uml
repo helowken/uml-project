@@ -1,0 +1,112 @@
+@startuml
+start
+note left: parse systemEnvironment
+:**AbstractBeanFactory**
+.getBean(String name);
+
+:**AbstractBeanFactory**
+.doGetBean(...);
+
+:**DefaultSingletonBeanRegistry**
+.getSingleton(...);
+
+:**AbstractAutowireCapableBeanFactory**
+.createBean(...);
+
+:**AbstractAutowireCapableBeanFactory**
+.doCreateBean(...);
+
+:**AbstractAutowireCapableBeanFactory**
+.createBeanInstance(...);
+
+:**AbstractAutowireCapableBeanFactory**
+.instantiateUsingFactoryMethod(...);
+
+:**ConstructorResolver**
+.instantiateUsingFactoryMethod(...);
+
+partition calculateArgsToUse {
+	:**ConstructorResolver**
+	.resovleConstructorArguments(...);
+	note right: for resolving factory constructor arguments;
+
+	:**BeanDefinitionValueResolver**
+	.resolveValueIfNecessary(argName, argValue);
+	note right
+	the content of argValue is "#{systemEnvironment['xxx']}",
+	the argValue type is TypedStringValue
+	end note
+
+	:**BeanDefinitionValueResolver**
+	.evaluate(TypedStringValue value);
+
+
+	:**BeanDefinitionValueResolver**
+	.doEvaluate(String value);
+	note right
+	the param "value" is the content in TypedStringValue,
+	its value is "#{systemEnvironment['xxx']}"
+	end note
+
+	:**AbstractBeanFactory**
+	.evaluateBeanDefinitionString(value, beanDefinition);
+
+	:**StandardBeanExpressionResolver**
+	.evaluate(value, evalContext);
+
+	:**SpelExpressionParser**
+	.parseExpression(value, beanExpressionParserContext);
+
+	:**SpelExpression**
+	.getValue(standardEvaluationContext);
+
+	:**CompoundExpression**
+	.getValue(...);
+
+	:**SpelNodeImpl**
+	.getValue(expressionState);
+
+	:**CompoundExpression**
+	.getValueInternal(expressionState);
+
+	:**CompoundExpression**
+	.getValueRef(expressionState);
+
+	:**PropertyOrFieldReference**
+	.getValueInterval(expressionState);
+
+	:**PropertyOrFieldReference**
+	.getValueInternal(contextObject, evalContext, isAutoGrowNullReferences);
+
+	:**PropertyOrFieldReference**
+	.readProperty(contextObject, evalContext, name);
+	note right: the name is "systemEnvironment";
+
+	:**BeanExpressionContextAccessor**
+	.read(context, target, name);
+	note right
+	the name is "systemEnvironment",
+	the target is BeanExpressionContext;
+	end note
+
+	:**BeanExpressionContext**
+	.getObject(String key);
+	note right: the key is "systemEnvironment"
+
+	partition getObject {
+		if (beanFactory.containsBean(key)?) then(yes)
+			:return beanFactory.getBean(key);
+			note right
+			the beanFactory is **DefaultListableBeanFactory**,
+			and now you can see that, systemEnvironment is a singleton bean;
+			end note
+		endif
+	}
+}
+
+:**SimpleInstantiationStratgy**
+.instantiate(..., args);
+note right: the args are the final argument values;
+
+stop
+@enduml

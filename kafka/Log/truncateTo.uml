@@ -1,0 +1,61 @@
+@startuml
+start
+note left: Log.truncateTo(targetOffset)
+if (targetOffset >= logEndOffset?) then(yes)
+	:return false for no need to truncate;
+else(no)
+	if (firstSegment.baseOffset > targetOffset?) then(yes)
+		partition truncateAllAndStartAtTargetOffset {
+			:delete all segments from cache;
+			:delete their files asynchronously in background schedule;
+			
+			:create a new segment which baseOffset is targetOffset;
+			:update logEndOffset to targetOffset;
+			:clear and flush the leaderEpochCache
+			(because no data for that);
+
+			:truncate producerStateManager
+			1. reset producerStateManager and delete all snapshot files
+			2. update producerStateManager's mapEndOffset to targetOffset
+			3. update producerStatemanager's firstUnstableOffset;
+
+			:update recoveryPoint to min(targetOffset, old recoveryPoint);
+			:update logStartOffset to targetOffset;
+		}
+	else(no)
+		:filter out segments which baseOffset > targetOffset;
+		:delete those segments;
+		
+		partition truncateActiveSegmentToTargetOffset {
+			:translate targetOffset to a mapping(targetOffset, filePosition);
+			if (mapping exists?) then(yes)
+				:truncate index, timeindex and transactionIndex files to targetOffset;
+				:resize index and timeindex file to maxIndexSize;
+
+				:truncate log to mapping's filePosition for targetOffset
+				1. throw error if filePosition < 0 || filePosition > logFile.size
+				2. truncate logFile channel to filePosition;
+
+				if (logFile.size == 0 after truncated?) then(yes)
+					:reset createTime and rollingBasedTime(for segment rolling);
+					:update maxTimestampSoFar and offsetOfMaxTimestamp
+					1. get lastTimestamp and lastOffset from timeindex last entry
+					2. get corresponding offset and filePosition for lastOffset from index
+					3. find the newMaxTimestamp and newOffset after filePosition in logFile
+					4. update maxTimestampSoFar to newMaxTimestamp and
+					update offsetOfMaxTimestamp to newOffset,
+					if newMaxTimestamp > maxTimestampSoFar;
+				endif
+			endif
+		}
+
+		:update logEndOffset to targetOffset;
+		:update recoveryPoint to min(targetOffset, old recoveryPoint);
+		:update logStartOffset to min(logStartOffset, targetOffset);
+
+		:clear leaderEpochs which startOffset >= targetOffset and flush; 
+		:loadProducerState for targetOffset;
+	endif
+endif
+stop
+@enduml
