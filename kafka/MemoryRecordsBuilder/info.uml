@@ -1,0 +1,24 @@
+@startuml
+start
+note left: info()
+if (builder's timestampType == LOG_APPEND_TIME?) then(yes)
+		:set maxTimestamp to builder's logAppendTime;
+	if (builder's compressionType != NONE || builder's magic >= 2?) then(yes)
+		:set shallowOffset to builder's lastOffset;
+	else(no)
+		:set shallowOffset to builder's baseOffset;
+	endif
+elseif (builder's maxTimestamp == NO_TIMESTAMP?) then(yes)
+	:set maxTimestamp to NO_TIMESTAMP(-1);
+	:set shallowOffset to builder's lastOffset;
+else(no)
+	:set maxTimestamp to builder's maxTimestamp;
+	if (builder's compressionType != NONE || builder's magic >= 2?) then(yes)
+		:set shallowOffset to builder's lastOffset;
+	else(no)
+		:set shallowOffset to builder's offsetOfMaxTimestamp;
+	endif	
+endif
+:return a RecordsInfo(maxTimestamp, shallowOffset);
+stop
+@enduml

@@ -1,0 +1,41 @@
+@startuml
+start
+note left: appendWithOffset(offset, record)
+#Red:error if 
+1. record's control flag != builder's control flag
+2. offset < builder's last offset (offsets must increase monotonically)
+3. record's timestamp < 0 && timestamp != NO_TIMESTAMP(-1)
+4. builder's magic < 2 && record has headers;
+
+:set builder's firstTimestamp to record's timestamp if firstTimestamp is null;
+if (builder's magic > 1?) then(yes)
+	partition appendDefaultRecord {
+		:calculate offsetDelta (offset - builder's baseOffset);
+		:calculate tiemstampDelta (record's timestamp - builder's firstTimestamp);
+		
+		:calculate bodySize for attributes, offsetDelta, timestampDelta, keySize, valueSize, headers;
+
+		:write to stream:
+		1. bodySize, timestampDelta, offsetDelta 
+		2. keySize and key if key is not null
+		3. valueSize and value if value is not null
+		4. length of headers and headers if headers is not null
+		5. calculate and return totalSize (bodySize + size for bodySize);
+		
+		#Red:error if
+		1. builder's numRecords (count of records in builder) == Integer.MAX_VALUE
+		2. offset - builder's baseOffset == Integer.MAX_VALUE;
+
+		:increase builder's numRecords by 1;
+		:add record's size to builder's uncompressedRecordsSize;
+		:set builder's lastOffset to offset;
+		if (builder's magic > 0 && record's timestamp > builder's maxTimestamp?) then(yes)
+			:set builder's maxTimestamp to record's timestamp
+			set builder's offsetOfMaxTimestamp to offset;
+		endif
+	}
+else(no)
+	:append legacy record;
+endif
+stop
+@enduml
