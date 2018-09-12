@@ -21,12 +21,61 @@ partition analyzeAndValidateRecords {
 }
 
 if (appendInfo.shallowCount > 0?) then(yes)
-	:trim invalid bytes of records if appendInfo.validBytes != records.sizeInBytes;
+	:create validRecords by trimming invalid bytes in records if appendInfo.validBytes != records.sizeInBytes;
 
 	if (assignOffsets?) then(yes)
 		:update appendInfo.firstOffset to log's nextOffset;
-		:calculate a result from validateMessagesAndAssignOffsets;
+		:create validateAndOffsetAssignResult by (func: validateMessagesAndAssignOffsets);
+		:update validRecords to validateAndOffsetAssignResult's validRecords;
+		:update appendInfo with validateAndOffsetAssignResult;
+		:re-validate whether any batch's size in validateAndOffsetAssignResult exceeds maxSize if needed;
+	else(no)
+		#Red:error if 
+		1. appendInfo's offset is not monotonic
+		2. appendInfo's firstOffset < log's nextOffset;
 	endif
+
+	:add each batch's partitionLeaderEpoch and baseOffset to leaderEpochCache;
+	#Red:error if validRecords' size > segmentSize in config;
+	:analyzeAndValidateProducerState, return appendInfo if there is a duplicateBatch;
+
+	:maybe roll a segment;
+	partition maybeRoll {
+		:calculate isTimeToRoll:
+		appendInfo.maxTimestamp - activeSegment's rollingBasedTimestamp > time in config
+		(if rollingBasedTimestamp is null, get first batch's maxTimestamp or segment's createTime);
+
+		:calculate needToRoll
+		1. activeSegment's size + validRecords's size > config's segmentSize
+		2. or activeSegment's size > 0 && isTimeToRoll
+		3. or index is full 
+		4. or timeindex is full
+		5. or appendInfo.lastOffset - activeSegment's baseOffset > Integer.MAX_VALUE (means can't create a offset for index);
+
+		if (needToRoll?) then(yes)
+			:calculate baseOffset for new segment: appendInfo.lastOffset - Integer.MAX_VALUE;
+			:roll a new segment (func: roll);
+		else(no)
+			:use activeSegment without rolling;
+		endif
+	}
+
+	partition appendToSegment {
+		if (records' size > 0?) then(yes)
+			:update rollingBasedTimestamp to largestTimestamp if segment has no records;
+			:append records to logFileChannel;
+			:update segment's maxTimestampSoFor and offsetOfMaxTimestamp if largestTimestamp > maxTimestampSoFar;
+			:add index and timeindex if needed;
+		endif
+	}
+
+	:update producerStates, complete transactions and update transaction indexes if needed;
+	:update producerStateManager's mapEndOffset and logEndOffset to appendInfo's lastOffset + 1;
+	:update first unstable offset;
+	:flush segment if reach config's flushSize (no flush by default, config's flushSize is Long.MAX_VALUE);
+	:return appendInfo;
+else(no)
+	:return appendInfo;
 endif
 stop
 @enduml

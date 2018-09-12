@@ -1,0 +1,19 @@
+@startuml
+start
+note left: roll a new segment
+:calculate newOffset: max(newBaseOffset, logEndOffset)
+:delete logFile, indexFile, timeindexFile, transationIndexFile if exist;
+if (lastSegment exists?) then(yes)
+	:try to add lastSegment's maxTimestamp and offsetOfMaxTimestamp to its timeindex;
+	:trim lastSegment's index, timeindex, log to valid size;
+endif
+:update producerStateManager's mapEndOffset to newOffset and take a snapshot;
+:create a segment which baseOffset = newOffset as newActiveSegment;
+#Red:error if exists a segment with the same baseOffset;
+:update logEndOffset with newActiveSegment;
+:flush segments which baseOffset >= log's recoveryPoint and < newOffset
+(includes log, index, timeindex, transactionIndex flush);
+:update log's recoveryPoint if < newOffset;
+:return newActiveSegment;
+stop
+@enduml
