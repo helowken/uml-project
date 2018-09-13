@@ -1,56 +1,14 @@
 @startuml
 start
 note left: ReplicaFetcherThread.run
-partition mybeTruncate {
-	:build leader epoch request
-	1. find out topicPartitions that need truncatingLog
-	2. filter out which has leaderEpoch
-	2. delay which has no leaderEpoch;
+:func: maybeTruncate;
 
-	:fetch epochs from leader
-	1. send OffsetsForLeaderEpochRequest to leader
-	2. get epochEndOffsets from response
-	3. set all topicPartitions' epochEndOffsets to UNDEFINED_EPOCH_OFFSET(-1);
+:build fetchRequest for partitionFetchStates and delay partitionsWithError;
 
-	partition maybeTruncateByEpochEndOffset {
-		while (has more (topicPartition, epochOffset)?) 
-			:get localReplica for topicPartition;
-			if (epochOffset has error?) then(yes)
-				:add topicPartition to partitionsWithError;
-			else(no)
-				:calculate truncationOffset
-				1. localReplica's highWatermark if 
-					epochOffset.endOffset == UNDEFINED_EPOCH_OFFSET(-1)
-				2. or min(epochOffset.endOffset, localReplica's logEndOffset.messageOffset);
-			
-				:abort and pause cleaner if needed;
-				:truncate log for topicPartition;
-				if (log truncated?) then(yes)
-					:update recovery point to file;
-					:delete snapshots for recovery point
-					1. find the lower segment baseOffset for active segment, 
-						if not found, use active segment baseOffset
-					2. find the lower segment baseOffset for recovery point,
-						if not found, use recovery point
-					3. calculate the min value of them
-					4. delete producer state snapshots before that;
-				endif
-				:truncate cleaner's checkpoints if needed;
-				:resume cleaner for cleaning if needed;
-			endif
-		end while
-	}
-	:update partitionFetchState for topicPartition
-	1. set fetchOffset to truncationOffset
-	2. set trunctingLog to false;
-}
+:wait for a time if fetchRequest has no valid partitionDatas
+(partitionData comes from partitionFetchState);
 
-:build fetchRequest for partitionFetchStates
-(delay topicPartitions which have error);
-
-:wait for a time if fetchRequest has no valid partitionFetchStates;
-
-if (fetchRequest has valid partitionFetchStates?) then(yes)
+if (fetchRequest has valid partitionDatas?) then(yes)
 	:fetch response for fetchRequest;
 	:wait for a time if error occurs during fetching;
 
@@ -66,18 +24,15 @@ if (fetchRequest has valid partitionFetchStates?) then(yes)
 
 				partition processPartitionData {
 					:get replica, partition for topicPartition;
-
 					if (currentState's fetchOffset != replica.logEndOffset.messageOffset?) then(yes)
 						#Red:Error for offset mismatch;
 					else(no)
-						:append records to partition follower;
+						:append records to partition follower (func: Partition:appendRecordsToFollower);
 					endif
-
 					:calculate followerHighWatermark
-					min(replica.logEndOffset.messageOffset, partitionData.highWatermark);
+					min(replica's logEndOffset, partitionData's highWatermark);
 
 					:update replica's highWatermark to followerHighWatermark;
-				
 					:get leaderLogStartOffset from partitionData;
 					if (leaderLogStartOffset > followerHighWatermark?) then(yes)
 						#Red:Error for offset out of range;
@@ -89,15 +44,19 @@ if (fetchRequest has valid partitionFetchStates?) then(yes)
 							:update first unstable offset;
 						endif
 					endif
-
 				}
-			
 				:update partitionFetchState' fetchOffset to newOffset;
+				:add topicPartition to partitionsWithError if error occurs;
 			elseif (partitionData has OFFSET_OUT_OF_RANGE error?) then(yes)
+				:calculate newOffset by (func: handleOffsetOutOfRange);
+				:update partitionFetchState' fetchOffset to newOffset;
+				:add topicPartition to partitionsWithError if error occurs;
 			else(no)
+				:add topicPartition to partitionsWithError;
 			endif
 		endif
 	end while
+	:delay partitionsWithError;
 endif
 stop
 @enduml

@@ -5,23 +5,7 @@ if (targetOffset >= logEndOffset?) then(yes)
 	:return false for no need to truncate;
 else(no)
 	if (firstSegment.baseOffset > targetOffset?) then(yes)
-		partition truncateAllAndStartAtTargetOffset {
-			:delete all segments from cache;
-			:delete their files asynchronously in background schedule;
-			
-			:create a new segment which baseOffset is targetOffset;
-			:update logEndOffset to targetOffset;
-			:clear and flush the leaderEpochCache
-			(because no data for that);
-
-			:truncate producerStateManager
-			1. reset producerStateManager and delete all snapshot files
-			2. update producerStateManager's mapEndOffset to targetOffset
-			3. update producerStatemanager's firstUnstableOffset;
-
-			:update recoveryPoint to min(targetOffset, old recoveryPoint);
-			:update logStartOffset to targetOffset;
-		}
+		:fully truncate and start at targetOffset (func: Log#truncateFullyAndStartAt);
 	else(no)
 		:filter out segments which baseOffset > targetOffset;
 		:delete those segments;

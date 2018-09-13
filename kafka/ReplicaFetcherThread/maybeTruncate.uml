@@ -1,0 +1,46 @@
+@startuml
+start
+note left: maybeTruncate
+:build leader epoch request
+1. find out topicPartitions that need truncatingLog
+2. filter out which has leaderEpoch
+2. delay which has no leaderEpoch;
+
+:fetch epochs from leader
+1. send OffsetsForLeaderEpochRequest to leader
+2. get epochEndOffsets from response
+3. set all topicPartitions' epochEndOffsets to UNDEFINED_EPOCH_OFFSET(-1);
+
+partition maybeTruncateByEpochEndOffset {
+	while (has more (topicPartition, epochOffset)?) 
+		:get localReplica for topicPartition;
+		if (epochOffset has error?) then(yes)
+			:add topicPartition to partitionsWithError;
+		else(no)
+			:calculate truncationOffset
+			1. localReplica's highWatermark if 
+				epochOffset.endOffset == UNDEFINED_EPOCH_OFFSET(-1)
+			2. or min(epochOffset.endOffset, localReplica's logEndOffset.messageOffset);
+		
+			:abort and pause cleaner if needed;
+			:truncate log for topicPartition;
+			if (log truncated?) then(yes)
+				:update recovery point to file;
+				:delete snapshots for recovery point
+				1. find the lower segment baseOffset for active segment, 
+					if not found, use active segment baseOffset
+				2. find the lower segment baseOffset for recovery point,
+					if not found, use recovery point
+				3. calculate the min value of them
+				4. delete producer state snapshots before that;
+			endif
+			:truncate cleaner's checkpoints if needed;
+			:resume cleaner for cleaning if needed;
+		endif
+	end while
+}
+:update partitionFetchState for topicPartition
+1. set fetchOffset to truncationOffset
+2. set trunctingLog to false;
+stop
+@enduml

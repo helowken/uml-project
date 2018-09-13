@@ -1,0 +1,22 @@
+@startuml
+start
+note left: appendRecordsToFollower
+:append records to localReplica's log 
+(isFromClient = false, assignOffsets = false, leaderEpoch = -1)
+func: Log#append;
+
+if (UnexpectedAppendOffsetException occurs?) then(yes)
+	if (replica's logEndOffset == replica's logStartOffset 
+		&& error's firstOffset < replica's logEndOffset
+		&& error's lastOffset >= replica's logEndOffset?) then(yes)
+		:fully truncate replica's log and start at error's firstOffset
+		(since the first record to be appended to follower's log will start the log from error's firstOffset)
+		func: Log#truncateFullyAndStartAt;
+		:save all liveLogs' recoveryPoints and delete unnecessary producerStates snapshots;
+		:append records to localReplica's log 
+		(isFromClient = false, assignOffsets = false, leaderEpoch = -1)
+		func: Log#append;
+	endif
+endif
+stop
+@enduml

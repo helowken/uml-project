@@ -1,0 +1,17 @@
+@startuml
+start
+note left: handleOffsetOutOfRange
+:get leaderEndOffset for topicPartition from leader;
+if (leaderEndOffset < replica's logEndOffset?) then(yes)
+	#Red:error if log truncation is not allowed;
+	:truncate log for topicPartition to leaderEndOffset (func: Log#truncateTo);
+	:return leaderEndOffset;
+else(no)
+	:get leaderStartOffset for topicPartition from leader;
+	:calculate offsetToFetch by max(leaderStartOffset, replica's logEndOffset);
+	:fully truncate replica's log and start at leaderStartOffset (func: Log#truncateFullyAndStartAt);
+	:write all liveLogs' recoveryPoints to file, delete producerStates snapshots that are unnecessary;
+	:return offsetToFetch;
+endif
+stop
+@enduml
