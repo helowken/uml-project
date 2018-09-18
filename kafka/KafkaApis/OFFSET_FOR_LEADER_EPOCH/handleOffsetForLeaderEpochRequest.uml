@@ -1,0 +1,43 @@
+@startuml
+start
+note left: handleOffsetForLeaderEpochRequest
+:get (topicPartition, requestedEpoch) pairs from request;
+#Red:error if authorize fail;
+while (has more (topicPartition, requestedEpoch) pairs?)
+	:get partition for topicPartition;
+	if (partition not found?) then(yes)
+		:error = UNKNOWN_TOPIC_OR_PARTITION,
+		endOffset = -1;
+	else(no)
+		if (partition is offline?) then(yes)
+			:error = KAFKA_STORAGE_ERROR, 
+			endOffset = -1;
+		else(no)
+			partition lastOffsetForLeaderEpoch {
+				if (partition is leader for topicPartition?) then(yes)
+					partition calculateEndOffset {
+						if (requestedEpoch == -1?) then(yes)
+							:endOffset = -1;
+						elseif (requestedEpoch == latestEpoch?) then(yes)
+							:endOffset = logEndOffset;
+						else(no)
+							:find the ceilEpoch which > requestedEpoch;
+							:endOffset = 
+							1. ceilEpoch's startOffset if found
+							2. -1 if not found;
+						endif
+					}
+					:error = NONE, 
+					endOffset = endOffset;
+				else(no)
+					:error = NOT_LEADER_FOR_PARTITION, 
+					endOffset = -1;
+				endif
+			}
+		endif
+	endif
+	:correlate topicPartition with EpochEndOffset(error, endOffset);
+end while
+:return response with (topicPartition, epochEndOffset) pairs;
+stop
+@enduml

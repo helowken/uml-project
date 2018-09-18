@@ -8,8 +8,9 @@ note left: maybeTruncate
 
 :fetch epochs from leader
 1. send OffsetsForLeaderEpochRequest to leader
-2. get epochEndOffsets from response
-3. set all topicPartitions' epochEndOffsets to UNDEFINED_EPOCH_OFFSET(-1);
+2. get epochEndOffsets from response;
+
+:set all topicPartitions' epochEndOffsets to UNDEFINED_EPOCH_OFFSET(-1) if error occurs;
 
 partition maybeTruncateByEpochEndOffset {
 	while (has more (topicPartition, epochOffset)?) 
@@ -40,7 +41,6 @@ partition maybeTruncateByEpochEndOffset {
 	end while
 }
 :update partitionFetchState for topicPartition
-1. set fetchOffset to truncationOffset
-2. set trunctingLog to false;
+1. set fetchOffset to truncationOffset and truncatingLog to false if truncated;
 stop
 @enduml
