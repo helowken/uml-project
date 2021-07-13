@@ -1,0 +1,18 @@
+@startuml
+start
+:check system load
+$ watch -d uptime
+$ top
+;
+
+if (system load is increasing?) then(yes)
+	:check cpu usage 
+	$ top
+	$
+	;
+else(no)
+	:;
+endif
+
+stop
+@enduml

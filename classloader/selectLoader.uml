@@ -1,0 +1,14 @@
+@startuml
+start
+if (url.getFile().endsWith("/")?) then(yes)
+	if (url.getProtocol() == "file"?) then(yes)
+		:**FileLoader**;
+	else (no)
+		:**Loader**;
+	endif
+else (no)
+	:**JarLoader**;
+endif
+
+stop
+@enduml

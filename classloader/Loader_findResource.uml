@@ -1,0 +1,22 @@
+@startuml
+start
+:findResource(name, check);
+:url = create a url(base, name);
+if (check == true?) then(yes)
+	:check url for security;
+endif
+:connection = url.openConnection();
+if (connection is HttpURLConnection?) then(yes)
+	:send a "head" request at connection;
+	if (failed?) then(yes)
+		:url = null;
+	endif
+else (no)
+	:open InputStream at connection;
+	if (failed?) then(yes)
+		:url = null;
+	endif
+endif
+:return url;
+stop
+@enduml

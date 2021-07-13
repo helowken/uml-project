@@ -1,0 +1,10 @@
+@startuml
+URLClassPath "1" *..> "many" Loader
+
+Loader <|-- JarLoader
+Loader <|-- FileLoader
+
+JarLoader --> JarIndex
+JarLoader --> MetaIndex
+
+@enduml

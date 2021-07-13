@@ -1,0 +1,11 @@
+@startuml
+start
+:findResource(name, check);
+:resource = getResource(name, check);
+if (resource != null?) then(yes)
+	:return resource.getURL();
+else (no)
+	:return null;
+endif
+stop
+@enduml

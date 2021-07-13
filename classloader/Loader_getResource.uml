@@ -1,0 +1,19 @@
+@startuml
+start
+:getResource(name, check);
+:url = create a url(base, name);
+if (check == true?) then(yes)
+	:check url for security;
+endif
+:connection = url.openConnection();
+:open InputStream at connection;
+if (faield?) then(yes)
+	:return null;
+else (no)
+	if (connection is JarURLConnection?) then(yes)
+		:get jarfile from connection for closing in future;
+	endif
+	:return Resource;
+endif
+stop
+@enduml

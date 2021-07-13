@@ -1,0 +1,17 @@
+@startuml
+start
+:getResource(name, check);
+:url = create a url(base, name);
+if (url requested resource had "../.." in path?) then(yes)
+	:return null;
+else (no)
+	if (check == true?) then(yes)
+		:check url for security;
+	endif
+	if (requested resource outside base dir?) then(yes)
+		:return null;
+	endif
+	:return Resource;
+endif
+stop
+@enduml

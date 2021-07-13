@@ -1,0 +1,75 @@
+@startuml
+
+ConnectionManager <|-- MasterSlaveConnectionManager
+
+
+MasterSlaveConnectionManager <|-- SentinelConnectionManager
+MasterSlaveConnectionManager : +createClient(...)
+MasterSlaveConnectionManager : #initSingleEntry()
+
+
+SentinelConnectionManager *--> MasterSlaveEntry
+SentinelConnectionManager : +<cinit>(...)
+SentinelConnectionManager : -scheduleChangeCheck(...)
+SentinelConnectionManager : -checkState(...)
+SentinelConnectionManager : -updateState(...)
+
+
+MasterSlaveEntry *--> LoadBalancerManager
+MasterSlaveEntry *--> MasterConnectionPool
+MasterSlaveEntry *--> ClientConnectionsEntry
+MasterSlaveEntry --> ConnectionManager
+MasterSlaveEntry : ClientConnectionsEntry masterEntry
+MasterSlaveEntry : +initSlaveBalancer(...)
+MasterSlaveEntry : +setupMasterEntry(...)
+MasterSlaveEntry : +connectionReadOp(...)
+MasterSlaveEntry : +connectionWriteOp(...)
+MasterSlaveEntry : +slaveDown(...)
+MasterSlaveEntry : +slaveUp(...)
+
+
+ConnectionPool <|-- MasterConnectionPool
+ConnectionPool <|-- SlaveConnectionPool
+ConnectionPool --> MasterSlaveEntry
+ConnectionPool --> ConnectionManager
+ConnectionPool *--> "many" ClientConnectionsEntry
+ConnectionPool : List<ClientConnectionsEntry> entries
+ConnectionPool : +get(...)
+ConnectionPool : #tryAcquireConnection(...)
+ConnectionPool : #acquireConnection(...)
+ConnectionPool : -connectTo(...)
+ConnectionPool : -checkForReconnect(...)
+ConnectionPool : -promiseFailure(...)
+
+
+LoadBalancerManager *--> SlaveConnectionPool
+LoadBalancerManager : +freeze(...)
+LoadBalancerManager : +unfreeze(...)
+
+
+ClientConnectionsEntry --> RedisClient
+ClientConnectionsEntry --> ConnectionManager
+ClientConnectionsEntry *--> "many" RedisConnection
+ClientConnectionsEntry : Queue<RedisConnection> allConnections
+ClientConnectionsEntry : Queue<RedisConnection> freeConnections
+ClientConnectionsEntry : AtomicLong firstFailTime
+ClientConnectionsEntry : +isFreezed()
+ClientConnectionsEntry : +getFreezeReason()
+ClientConnectionsEntry : +isMasterForRead()
+ClientConnectionsEntry : +setFreezed(boolean)
+ClientConnectionsEntry : +setFreezeReason(...)
+ClientConnectionsEntry : +trySetupFistFail()
+ClientConnectionsEntry : +connect()
+ClientConnectionsEntry : +pollConnection()
+ClientConnectionsEntry : +releaseConnection()
+ClientConnectionsEntry : +releaseConnection(RedisConnection)
+
+
+RedisConnection --> RedisClient
+RedisConnection --> Channel
+RedisConnection : +closeAsync()
+
+
+RedisClient : +connectAsync()
+
+@enduml
